@@ -2,8 +2,8 @@ import os
 import sqlite3
 import logging
 from datetime import datetime
-from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InputFile, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # Настройка логирования
 logging.basicConfig(
@@ -202,6 +202,16 @@ def get_weight_history(user_id, limit=10):
     return results
 
 
+# Функция для создания клавиатуры с кнопками
+def get_main_keyboard():
+    keyboard = [
+        [KeyboardButton("📊 Отправить вес")],
+        [KeyboardButton("📅 Последний вес"), KeyboardButton("📈 История")],
+        [KeyboardButton("🗑️ Удалить последнее"), KeyboardButton("ℹ️ Помощь")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+
+
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -216,15 +226,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 📈 Я буду сохранять его и показывать изменения.
 
-📋 Доступные команды:
-/start - Начать работу
-/last - Посмотреть последний вес
-/history - История измерений (последние 10)
-/delete_last - Удалить последнюю запись
-/help - Помощь
+👇 Используй кнопки ниже для управления:
 """
 
-    await update.message.reply_text(welcome_text)
+    await update.message.reply_text(welcome_text, reply_markup=get_main_keyboard())
 
 
 # Команда /help
@@ -236,16 +241,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Примеры: 75.5, 80, 68.3
 
 📊 Команды:
-/start - Начать работу
-/last - Посмотреть последний вес
-/history - История измерений (последние 10)
-/delete_last - Удалить последнюю запись
-/help - Помощь
+📊 Отправить вес - Ввести текущий вес
+📅 Последний вес - Посмотреть последнее измерение
+📈 История - История измерений (последние 10)
+🗑️ Удалить последнее - Удалить последнюю запись
+ℹ️ Помощь - Эта справка
 
 💡 Совет: Отправляйте вес каждый день в одно и то же время для более точного отслеживания!
 """
 
-    await update.message.reply_text(help_text)
+    await update.message.reply_text(help_text, reply_markup=get_main_keyboard())
 
 
 # Команда /last
@@ -262,9 +267,15 @@ async def last_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             formatted_date = date
 
-        await update.message.reply_text(f"📅 Последнее измерение: {formatted_date}\n⚖️ Вес: {weight} кг")
+        await update.message.reply_text(
+            f"📅 Последнее измерение: {formatted_date}\n⚖️ Вес: {weight} кг",
+            reply_markup=get_main_keyboard()
+        )
     else:
-        await update.message.reply_text("📭 У вас еще нет записей о весе. Отправьте свой вес!")
+        await update.message.reply_text(
+            "📭 У вас еще нет записей о весе. Отправьте свой вес!",
+            reply_markup=get_main_keyboard()
+        )
 
 
 # Команда /history
@@ -298,7 +309,7 @@ async def weight_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         response = "📭 У вас еще нет записей о весе."
 
-    await update.message.reply_text(response)
+    await update.message.reply_text(response, reply_markup=get_main_keyboard())
 
 
 # Команда /delete_last - удаление последней записи
@@ -309,10 +320,13 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
     last_record = get_last_weight(user_id)
 
     if not last_record:
-        await update.message.reply_text("📭 У вас нет записей для удаления.")
+        await update.message.reply_text(
+            "📭 У вас нет записей для удаления.",
+            reply_markup=get_main_keyboard()
+        )
         return
 
-    # Создаем кнопки подтверждения
+    # Создаем inline-кнопки подтверждения
     keyboard = [
         [
             {"text": "✅ Да, удалить", "callback_data": f"delete_confirm_{user_id}"},
@@ -338,7 +352,7 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
     )
 
 
-# Обработка callback-запросов (кнопок)
+# Обработка callback-запросов (inline-кнопок)
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -376,6 +390,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ Удаление отменено.")
 
 
+# Обработка нажатий на кнопки клавиатуры
+async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    user_id = update.effective_user.id
+
+    if text == "📊 Отправить вес":
+        await update.message.reply_text(
+            "Введите ваш вес в килограммах (например: 75.5 или 80):",
+            reply_markup=get_main_keyboard()
+        )
+
+    elif text == "📅 Последний вес":
+        await last_weight(update, context)
+
+    elif text == "📈 История":
+        await weight_history(update, context)
+
+    elif text == "🗑️ Удалить последнее":
+        await delete_last_weight_command(update, context)
+
+    elif text == "ℹ️ Помощь":
+        await help_command(update, context)
+
+
 # Обработка сообщений с весом
 async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -387,7 +425,10 @@ async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TY
 
         # Проверяем, что вес в разумных пределах
         if weight < 30 or weight > 300:
-            await update.message.reply_text("⚠️ Пожалуйста, введите реальный вес (30-300 кг)")
+            await update.message.reply_text(
+                "⚠️ Пожалуйста, введите реальный вес (30-300 кг)",
+                reply_markup=get_main_keyboard()
+            )
             return
 
         # Регистрируем пользователя если он новый
@@ -429,11 +470,14 @@ async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             response += "\n🎉 Это ваша первая запись! Продолжайте в том же духе!"
 
-        await update.message.reply_text(response)
+        await update.message.reply_text(response, reply_markup=get_main_keyboard())
 
     except ValueError:
         # Если не удалось преобразовать в число
-        await update.message.reply_text("⚠️ Пожалуйста, отправьте вес в виде числа (например: 75.5 или 80)")
+        await update.message.reply_text(
+            "⚠️ Пожалуйста, отправьте вес в виде числа (например: 75.5 или 80)",
+            reply_markup=get_main_keyboard()
+        )
 
 
 # Команда для очистки истории (скрытая команда для админа)
@@ -446,7 +490,7 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     conn.close()
 
-    await update.message.reply_text("🗑️ Ваша история веса очищена!")
+    await update.message.reply_text("🗑️ Ваша история веса очищена!", reply_markup=get_main_keyboard())
 
 
 from backup import backup_database
@@ -503,12 +547,19 @@ def main():
     application.add_handler(CommandHandler("clear", clear_history))  # Скрытая команда
     application.add_handler(CommandHandler("backup", backup_command))
 
-    # Регистрируем обработчик callback-запросов (для кнопок)
-    from telegram.ext import CallbackQueryHandler
+    # Регистрируем обработчик нажатий на кнопки клавиатуры
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_press))
+
+    # Регистрируем обработчик callback-запросов (для inline-кнопок)
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Регистрируем обработчик текстовых сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_weight_message))
+    # Регистрируем обработчик текстовых сообщений (для ввода веса)
+    # Этот обработчик должен быть последним, чтобы не перехватывать кнопки
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & ~filters.Regex(
+            r'^(📊 Отправить вес|📅 Последний вес|📈 История|🗑️ Удалить последнее|ℹ️ Помощь)$'),
+        handle_weight_message
+    ))
 
     # Запускаем бота
     logger.info("🤖 Бот успешно запущен на Railway!")
