@@ -58,9 +58,14 @@ def format_samara_time(dt=None, date_only=False):
     if isinstance(dt, str):
         try:
             # Если dt - строка из базы данных, преобразуем её
-            # Время в базе хранится как строка в формате Самары
-            dt = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
-        except:
+            # Время в базе хранится как UTC, нужно преобразовать в Самару
+            dt_utc = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+            # Предполагаем, что время в базе UTC, добавляем часовой пояс
+            dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+            # Конвертируем в Самару
+            dt = dt_utc.astimezone(SAMARA_TZ)
+        except Exception as e:
+            logger.error(f"Ошибка форматирования времени {dt}: {e}")
             return dt
 
     if date_only:
@@ -130,17 +135,21 @@ def save_weight(user_id, weight):
     conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
-    # Получаем текущее время в Самаре и форматируем для SQLite
-    current_time = get_samara_time().strftime('%Y-%m-%d %H:%M:%S')
+    # Получаем текущее время в Самаре
+    current_time = get_samara_time()
+    # Преобразуем в UTC для хранения в базе
+    current_time_utc = current_time.astimezone(timezone.utc)
+    current_time_str = current_time_utc.strftime('%Y-%m-%d %H:%M:%S')
 
-    # Сохраняем вес с текущим временем Самары
+    # Сохраняем вес с текущим временем (в UTC)
     cursor.execute('''
         INSERT INTO weight_records (user_id, weight, date)
         VALUES (?, ?, ?)
-    ''', (user_id, weight, current_time))
+    ''', (user_id, weight, current_time_str))
 
     conn.commit()
     conn.close()
+    logger.info(f"✅ Вес {weight} кг сохранен для пользователя {user_id} в {current_time}")
 
 
 # Функция для получения последнего веса
@@ -158,6 +167,9 @@ def get_last_weight(user_id):
 
     result = cursor.fetchone()
     conn.close()
+
+    if result:
+        logger.info(f"📊 Получен последний вес для пользователя {user_id}: {result[0]} кг")
 
     return result
 
@@ -211,6 +223,9 @@ def delete_last_weight(user_id):
     conn.commit()
     conn.close()
 
+    if record_to_delete:
+        logger.info(f"🗑️ Удалена запись для пользователя {user_id}: {record_to_delete[0]} кг")
+
     return record_to_delete
 
 
@@ -229,6 +244,8 @@ def get_weight_history(user_id, limit=10):
 
     results = cursor.fetchall()
     conn.close()
+
+    logger.info(f"📊 Получена история из {len(results)} записей для пользователя {user_id}")
 
     return results
 
@@ -303,7 +320,11 @@ async def last_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if last_record:
         weight, date, _ = last_record
         # Преобразуем время в Самару
-        formatted_date = format_samara_time(date)
+        try:
+            formatted_date = format_samara_time(date)
+        except Exception as e:
+            logger.error(f"Ошибка при форматировании даты {date}: {e}")
+            formatted_date = date
 
         await update.message.reply_text(
             f"🌍 Временная зона: Самара (UTC+4)\n"
@@ -327,8 +348,12 @@ async def weight_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "🌍 Временная зона: Самара (UTC+4)\n"
         response += "📊 История ваших измерений:\n\n"
         for i, (weight, date) in enumerate(history, 1):
-            # Форматируем дату для Самары
-            formatted_date = format_samara_time(date, date_only=True)
+            try:
+                # Форматируем дату для Самары
+                formatted_date = format_samara_time(date, date_only=True)
+            except Exception as e:
+                logger.error(f"Ошибка при форматировании даты {date}: {e}")
+                formatted_date = date[:10]  # Просто берем дату без времени
             response += f"{i}. {formatted_date}: {weight} кг\n"
 
         # Добавляем изменение с первого до последнего измерения
@@ -374,7 +399,11 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
     weight, date, _ = last_record
 
     # Форматируем дату для Самары
-    formatted_date = format_samara_time(date)
+    try:
+        formatted_date = format_samara_time(date)
+    except Exception as e:
+        logger.error(f"Ошибка при форматировании даты {date}: {e}")
+        formatted_date = date
 
     await update.message.reply_text(
         f"❓ Вы уверены, что хотите удалить последнюю запись?\n\n"
@@ -406,7 +435,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if deleted_record:
             weight, date = deleted_record
             # Форматируем дату для Самары
-            formatted_date = format_samara_time(date)
+            try:
+                formatted_date = format_samara_time(date)
+            except Exception as e:
+                logger.error(f"Ошибка при форматировании даты {date}: {e}")
+                formatted_date = date
 
             await query.edit_message_text(
                 f"🗑️ Запись успешно удалена!\n\n"
@@ -490,7 +523,11 @@ async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TY
             difference = weight - last_weight_value
 
             # Форматируем дату последней записи для Самары
-            formatted_last_date = format_samara_time(last_date, date_only=True)
+            try:
+                formatted_last_date = format_samara_time(last_date, date_only=True)
+            except Exception as e:
+                logger.error(f"Ошибка при форматировании даты {last_date}: {e}")
+                formatted_last_date = last_date[:10]  # Просто берем дату без времени
 
             response += f"\n📊 Сравнение с последним измерением ({formatted_last_date}):\n"
             response += f"Предыдущий вес: {last_weight_value} кг\n"
