@@ -4,6 +4,9 @@ services:
     container_name: weight-bot
     restart: unless-stopped
     volumes:
-      - ./data:/app/data
+      - weight_data:/app/
     env_file:
       - .env
+
+volumes:
+  weight_data:

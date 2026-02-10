@@ -42,6 +42,10 @@ logger.info("  Просто отправьте вес числом (наприм
 
 # Инициализация базы данных
 def init_db():
+    # Создаем папку data если её нет
+    os.makedirs('data', exist_ok=True)
+
+    # Подключаемся к базе в папке data
     conn = sqlite3.connect('weight_tracker.db')
     cursor = conn.cursor()
 
@@ -315,6 +319,30 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🗑️ Ваша история веса очищена!")
 
 
+from backup import backup_database
+
+
+# Команда /backup (для админа)
+async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # Проверка на администратора (укажите свой ID)
+    ADMIN_ID = 123456789  # Замените на ваш Telegram ID
+
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    await update.message.reply_text("🔄 Создаю резервную копию...")
+
+    backup_file = backup_database()
+
+    if backup_file:
+        await update.message.reply_text(f"✅ Резервная копия создана: {backup_file}")
+    else:
+        await update.message.reply_text("❌ Ошибка при создании резервной копии")
+
+
 # Главная функция
 def main():
     # Инициализируем базу данных
@@ -329,6 +357,7 @@ def main():
     application.add_handler(CommandHandler("last", last_weight))
     application.add_handler(CommandHandler("history", weight_history))
     application.add_handler(CommandHandler("clear", clear_history))  # Скрытая команда
+    application.add_handler(CommandHandler("backup", backup_command))
 
     # Регистрируем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_weight_message))
