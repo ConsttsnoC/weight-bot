@@ -2,7 +2,7 @@ import os
 import sqlite3
 import logging
 from datetime import datetime
-from telegram import Update
+from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Настройка логирования
@@ -326,8 +326,8 @@ from backup import backup_database
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    # Проверка на администратора (укажите свой ID)
-    ADMIN_ID = 203790724  # Замените на ваш Telegram ID
+    # Проверка на администратора
+    ADMIN_ID = 203790724  # Замените на ваш ID
 
     if user_id != ADMIN_ID:
         await update.message.reply_text("⛔ Эта команда только для администратора")
@@ -335,10 +335,23 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🔄 Создаю резервную копию...")
 
+    # Создаем бэкап
     backup_file = backup_database()
 
-    if backup_file:
-        await update.message.reply_text(f"✅ Резервная копия создана: {backup_file}")
+    if backup_file and os.path.exists(backup_file):
+        try:
+            # Отправляем файл в Telegram
+            with open(backup_file, 'rb') as file:
+                await update.message.reply_document(
+                    document=InputFile(file, filename=os.path.basename(backup_file)),
+                    caption=f"✅ Резервная копия создана: {os.path.basename(backup_file)}"
+                )
+
+            # Удаляем файл после отправки (опционально)
+            # os.remove(backup_file)
+
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка при отправке файла: {e}")
     else:
         await update.message.reply_text("❌ Ошибка при создании резервной копии")
 
