@@ -46,7 +46,7 @@ def init_db():
     os.makedirs('data', exist_ok=True)
 
     # Подключаемся к базе в папке data
-    conn = sqlite3.connect('weight_tracker.db')
+    conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
     # Создаем таблицу пользователей
@@ -84,7 +84,7 @@ def init_db():
 
 # Функция для регистрации пользователя
 def register_user(user_id, username, first_name, last_name):
-    conn = sqlite3.connect('weight_tracker.db')
+    conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -98,7 +98,7 @@ def register_user(user_id, username, first_name, last_name):
 
 # Функция для сохранения веса
 def save_weight(user_id, weight):
-    conn = sqlite3.connect('weight_tracker.db')
+    conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
     # Сохраняем вес
@@ -113,7 +113,7 @@ def save_weight(user_id, weight):
 
 # Функция для получения последнего веса
 def get_last_weight(user_id):
-    conn = sqlite3.connect('weight_tracker.db')
+    conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -132,7 +132,7 @@ def get_last_weight(user_id):
 
 # Функция для получения истории веса
 def get_weight_history(user_id, limit=10):
-    conn = sqlite3.connect('weight_tracker.db')
+    conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -309,7 +309,7 @@ async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TY
 # Команда для очистки истории (скрытая команда для админа)
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    conn = sqlite3.connect('weight_tracker.db')
+    conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
     cursor.execute('DELETE FROM weight_records WHERE user_id = ?', (user_id,))
