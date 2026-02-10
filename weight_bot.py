@@ -35,6 +35,7 @@ logger.info("  /start - Начать работу")
 logger.info("  /help - Помощь и инструкции")
 logger.info("  /last - Последний вес")
 logger.info("  /history - История измерений")
+logger.info("  /delete_last - Удалить последнюю запись о весе")
 logger.info("  Просто отправьте вес числом (например: 75.5)")
 
 
@@ -117,7 +118,7 @@ def get_last_weight(user_id):
     cursor = conn.cursor()
 
     cursor.execute('''
-        SELECT weight, date 
+        SELECT weight, date, id
         FROM weight_records 
         WHERE user_id = ? 
         ORDER BY date DESC 
@@ -128,6 +129,58 @@ def get_last_weight(user_id):
     conn.close()
 
     return result
+
+
+# Функция для получения ID последней записи
+def get_last_weight_id(user_id):
+    conn = sqlite3.connect('data/weight_tracker.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT id
+        FROM weight_records 
+        WHERE user_id = ? 
+        ORDER BY date DESC 
+        LIMIT 1
+    ''', (user_id,))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result[0] if result else None
+
+
+# Функция для удаления последней записи о весе
+def delete_last_weight(user_id):
+    conn = sqlite3.connect('data/weight_tracker.db')
+    cursor = conn.cursor()
+
+    # Получаем ID последней записи
+    last_id = get_last_weight_id(user_id)
+
+    if not last_id:
+        conn.close()
+        return None
+
+    # Получаем информацию об удаляемой записи перед удалением
+    cursor.execute('''
+        SELECT weight, date 
+        FROM weight_records 
+        WHERE id = ?
+    ''', (last_id,))
+
+    record_to_delete = cursor.fetchone()
+
+    # Удаляем запись
+    cursor.execute('''
+        DELETE FROM weight_records 
+        WHERE id = ?
+    ''', (last_id,))
+
+    conn.commit()
+    conn.close()
+
+    return record_to_delete
 
 
 # Функция для получения истории веса
@@ -167,6 +220,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /start - Начать работу
 /last - Посмотреть последний вес
 /history - История измерений (последние 10)
+/delete_last - Удалить последнюю запись
 /help - Помощь
 """
 
@@ -185,6 +239,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /start - Начать работу
 /last - Посмотреть последний вес
 /history - История измерений (последние 10)
+/delete_last - Удалить последнюю запись
 /help - Помощь
 
 💡 Совет: Отправляйте вес каждый день в одно и то же время для более точного отслеживания!
@@ -199,7 +254,7 @@ async def last_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_record = get_last_weight(user_id)
 
     if last_record:
-        weight, date = last_record
+        weight, date, _ = last_record
         # Преобразуем строку даты в объект datetime
         try:
             date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
@@ -246,6 +301,81 @@ async def weight_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response)
 
 
+# Команда /delete_last - удаление последней записи
+async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # Проверяем, есть ли записи у пользователя
+    last_record = get_last_weight(user_id)
+
+    if not last_record:
+        await update.message.reply_text("📭 У вас нет записей для удаления.")
+        return
+
+    # Создаем кнопки подтверждения
+    keyboard = [
+        [
+            {"text": "✅ Да, удалить", "callback_data": f"delete_confirm_{user_id}"},
+            {"text": "❌ Нет, отмена", "callback_data": f"delete_cancel_{user_id}"}
+        ]
+    ]
+
+    weight, date, _ = last_record
+
+    # Форматируем дату
+    try:
+        date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+        formatted_date = date_obj.strftime('%d.%m.%Y %H:%M')
+    except:
+        formatted_date = date
+
+    await update.message.reply_text(
+        f"❓ Вы уверены, что хотите удалить последнюю запись?\n\n"
+        f"📅 Дата: {formatted_date}\n"
+        f"⚖️ Вес: {weight} кг\n\n"
+        f"Это действие нельзя отменить!",
+        reply_markup={"inline_keyboard": keyboard}
+    )
+
+
+# Обработка callback-запросов (кнопок)
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    callback_data = query.data
+    user_id = query.from_user.id
+
+    # Проверяем, что callback_data принадлежит текущему пользователю
+    if f"_{user_id}" not in callback_data:
+        await query.edit_message_text("⛔ Это действие предназначено другому пользователю.")
+        return
+
+    if callback_data.startswith("delete_confirm"):
+        # Удаляем последнюю запись
+        deleted_record = delete_last_weight(user_id)
+
+        if deleted_record:
+            weight, date = deleted_record
+            try:
+                date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
+                formatted_date = date_obj.strftime('%d.%m.%Y %H:%M')
+            except:
+                formatted_date = date
+
+            await query.edit_message_text(
+                f"🗑️ Запись успешно удалена!\n\n"
+                f"📅 Дата: {formatted_date}\n"
+                f"⚖️ Вес: {weight} кг\n\n"
+                f"Теперь последней записью является предыдущее измерение."
+            )
+        else:
+            await query.edit_message_text("❌ Ошибка при удалении записи.")
+
+    elif callback_data.startswith("delete_cancel"):
+        await query.edit_message_text("✅ Удаление отменено.")
+
+
 # Обработка сообщений с весом
 async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -277,7 +407,7 @@ async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TY
         response += f"⚖️ Вес: {weight} кг\n"
 
         if last_record:
-            last_weight_value, last_date = last_record
+            last_weight_value, last_date, _ = last_record
             difference = weight - last_weight_value
 
             # Форматируем дату последней записи
@@ -369,8 +499,13 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("last", last_weight))
     application.add_handler(CommandHandler("history", weight_history))
+    application.add_handler(CommandHandler("delete_last", delete_last_weight_command))
     application.add_handler(CommandHandler("clear", clear_history))  # Скрытая команда
     application.add_handler(CommandHandler("backup", backup_command))
+
+    # Регистрируем обработчик callback-запросов (для кнопок)
+    from telegram.ext import CallbackQueryHandler
+    application.add_handler(CallbackQueryHandler(button_callback))
 
     # Регистрируем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_weight_message))
