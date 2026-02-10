@@ -597,6 +597,9 @@ def main():
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("time", show_time))  # Новая команда для показа времени
 
+    # ⭐⭐ ВАЖНО: Добавляем обработчик callback-запросов ДО обработчиков сообщений ⭐⭐
+    application.add_handler(CallbackQueryHandler(button_callback))
+
     # Регистрируем обработчик нажатий на кнопки клавиатуры
     application.add_handler(MessageHandler(
         filters.Regex(r'^(📊 Отправить вес|📅 Последний вес|📈 История|🗑️ Удалить последнее|ℹ️ Помощь)$'),
