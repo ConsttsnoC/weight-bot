@@ -597,16 +597,14 @@ def main():
     application.add_handler(CommandHandler("time", show_time))  # Новая команда для показа времени
 
     # Регистрируем обработчик нажатий на кнопки клавиатуры
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_press))
-
-    # Регистрируем обработчик callback-запросов (для inline-кнопок)
-    application.add_handler(CallbackQueryHandler(button_callback))
+    application.add_handler(MessageHandler(
+        filters.Regex(r'^(📊 Отправить вес|📅 Последний вес|📈 История|🗑️ Удалить последнее|ℹ️ Помощь)$'),
+        handle_button_press
+    ))
 
     # Регистрируем обработчик текстовых сообщений (для ввода веса)
-    # Этот обработчик должен быть последним, чтобы не перехватывать кнопки
     application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & ~filters.Regex(
-            r'^(📊 Отправить вес|📅 Последний вес|📈 История|🗑️ Удалить последнее|ℹ️ Помощь)$'),
+        filters.TEXT & ~filters.COMMAND,
         handle_weight_message
     ))
 
