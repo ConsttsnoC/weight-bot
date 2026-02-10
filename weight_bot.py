@@ -14,6 +14,32 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 
+# ========== ДОБАВЬТЕ ЭТУ ПРОВЕРКУ ==========
+if not TELEGRAM_TOKEN:
+    logger.error("❌ ОШИБКА: TELEGRAM_TOKEN не установлен!")
+    logger.error("Добавьте TELEGRAM_TOKEN в переменные окружения Railway")
+    logger.error("Settings → Variables → New Variable")
+    exit(1)
+
+# Проверяем формат токена
+if ':' not in TELEGRAM_TOKEN:
+    logger.error(f"❌ НЕВЕРНЫЙ ФОРМАТ ТОКЕНА: {TELEGRAM_TOKEN}")
+    logger.error("Токен должен быть: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz")
+    exit(1)
+
+# Выводим информацию о токене (первые 10 символов для безопасности)
+logger.info(f"✅ Токен получен: {TELEGRAM_TOKEN[:10]}...")
+logger.info("🤖 Запускаем Telegram Weight Bot...")
+logger.info("📋 Доступные команды в боте:")
+logger.info("  /start - Начать работу")
+logger.info("  /help - Помощь и инструкции")
+logger.info("  /last - Последний вес")
+logger.info("  /history - История измерений")
+logger.info("  Просто отправьте вес числом (например: 75.5)")
+
+
+# ==========================================
+
 # Инициализация базы данных
 def init_db():
     conn = sqlite3.connect('weight_tracker.db')
@@ -308,14 +334,17 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_weight_message))
 
     # Запускаем бота
-    print("🤖 Бот запущен. Нажмите Ctrl+C для остановки...")
-    print("👉 Откройте Telegram и найдите своего бота")
-    print("👉 Отправьте команду /start")
+    logger.info("🤖 Бот успешно запущен на Railway!")
+    logger.info("📱 Откройте Telegram и найдите своего бота")
+    logger.info("👉 Отправьте команду /start")
 
     try:
         application.run_polling()
+    except Exception as e:
+        logger.error(f"❌ Ошибка при запуске бота: {e}")
+        logger.info("🔄 Попробуйте перезапустить деплоймент на Railway")
     except KeyboardInterrupt:
-        print("\n🛑 Бот остановлен")
+        logger.info("\n🛑 Бот остановлен")
 
 
 if __name__ == '__main__':
