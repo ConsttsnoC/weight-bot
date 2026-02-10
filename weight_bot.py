@@ -349,7 +349,6 @@ async def weight_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response, reply_markup=get_main_keyboard())
 
 
-# Команда /delete_last - удаление последней записи
 async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -364,10 +363,12 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
         return
 
     # Создаем inline-кнопки подтверждения
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup  # Добавьте импорт
+
     keyboard = [
         [
-            {"text": "✅ Да, удалить", "callback_data": f"delete_confirm_{user_id}"},
-            {"text": "❌ Нет, отмена", "callback_data": f"delete_cancel_{user_id}"}
+            InlineKeyboardButton("✅ Да, удалить", callback_data=f"delete_confirm_{user_id}"),
+            InlineKeyboardButton("❌ Нет, отмена", callback_data=f"delete_cancel_{user_id}")
         ]
     ]
 
@@ -382,7 +383,7 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
         f"📅 Дата: {formatted_date}\n"
         f"⚖️ Вес: {weight} кг\n\n"
         f"Это действие нельзя отменить!",
-        reply_markup={"inline_keyboard": keyboard}
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -395,7 +396,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
 
     # Проверяем, что callback_data принадлежит текущему пользователю
-    if f"_{user_id}" not in callback_data:
+    if not callback_data.endswith(str(user_id)):
         await query.edit_message_text("⛔ Это действие предназначено другому пользователю.")
         return
 
