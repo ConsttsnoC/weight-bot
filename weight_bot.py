@@ -409,12 +409,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Форматируем дату для Самары
             formatted_date = format_samara_time(date)
 
+            # Редактируем сообщение с inline-клавиатурой
             await query.edit_message_text(
                 f"🗑️ Запись успешно удалена!\n\n"
                 f"🌍 Временная зона: Самара (UTC+4)\n"
                 f"📅 Дата: {formatted_date}\n"
                 f"⚖️ Вес: {weight} кг\n\n"
                 f"Теперь последней записью является предыдущее измерение."
+            )
+
+            # Отправляем новое сообщение с основной клавиатурой
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="✅ Удаление завершено. Используйте кнопки ниже для продолжения:",
+                reply_markup=get_main_keyboard()
             )
         else:
             await query.edit_message_text("❌ Ошибка при удалении записи.")
@@ -423,6 +431,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ Удаление отменено.")
 
 
+# Обработка нажатий на кнопки клавиатуры
 # Обработка нажатий на кнопки клавиатуры
 async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -444,6 +453,7 @@ async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE
         await weight_history(update, context)
 
     elif text == "🗑️ Удалить последнее":
+        # Для кнопки клавиатуры вызываем ту же функцию, что и для команды
         await delete_last_weight_command(update, context)
 
     elif text == "ℹ️ Помощь":
