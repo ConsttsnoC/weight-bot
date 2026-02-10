@@ -538,7 +538,7 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🗑️ Ваша история веса очищена!", reply_markup=get_main_keyboard())
 
 
-from backup import backup_database
+from backup import backup_database, start_backup_scheduler
 
 
 # Команда /backup (для админа)
@@ -589,10 +589,66 @@ async def show_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(time_info, reply_markup=get_main_keyboard())
 
 
+async def backup_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать информацию о бекапах"""
+    user_id = update.effective_user.id
+
+    # Проверка на администратора
+    ADMIN_ID = 203790724  # Замените на ваш ID
+
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    backup_dir = 'backups'
+
+    try:
+        if not os.path.exists(backup_dir):
+            await update.message.reply_text("📭 Папка бекапов не найдена")
+            return
+
+        backups = sorted([f for f in os.listdir(backup_dir)
+                          if f.endswith('.db')])
+
+        if not backups:
+            await update.message.reply_text("📭 Бекапов не найдено")
+            return
+
+        response = "📊 Статус бекапов:\n\n"
+        response += f"📁 Папка: {backup_dir}\n"
+        response += f"📦 Всего бекапов: {len(backups)}\n\n"
+
+        # Показываем последние 5 бекапов
+        for i, backup in enumerate(backups[-5:], 1):
+            backup_path = os.path.join(backup_dir, backup)
+            size_mb = os.path.getsize(backup_path) / 1024 / 1024
+            created = os.path.getctime(backup_path)
+            created_date = datetime.fromtimestamp(created).strftime('%d.%m.%Y %H:%M')
+
+            response += f"{i}. {backup}\n"
+            response += f"   📅 {created_date} | 📦 {size_mb:.2f} MB\n\n"
+
+        # Информация о следующем бекапе
+        response += "⏰ Следующий автоматический бекап через 4 часа\n"
+        response += "🔄 Автобэкапы: ВКЛЮЧЕНЫ ✅"
+
+        await update.message.reply_text(response)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
 # Главная функция
 def main():
     # Инициализируем базу данных
     init_db()
+
+    logger.info("🔄 Запуск автоматических бекапов...")
+    backup_started = start_backup_scheduler()
+
+    if backup_started:
+        logger.info("✅ Автоматические бекапы включены (каждые 4 часа)")
+    else:
+        logger.warning("⚠️ Не удалось запустить автоматические бекапы")
 
     # Создаем приложение
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -606,6 +662,7 @@ def main():
     application.add_handler(CommandHandler("clear", clear_history))  # Скрытая команда
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("time", show_time))  # Новая команда для показа времени
+    application.add_handler(CommandHandler("backup_status", backup_status))
 
     # ⭐⭐ ВАЖНО: Добавляем обработчик callback-запросов ДО обработчиков сообщений ⭐⭐
     application.add_handler(CallbackQueryHandler(button_callback))
