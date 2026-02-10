@@ -327,7 +327,7 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     # Проверка на администратора (укажите свой ID)
-    ADMIN_ID = 123456789  # Замените на ваш Telegram ID
+    ADMIN_ID = 203790724  # Замените на ваш Telegram ID
 
     if user_id != ADMIN_ID:
         await update.message.reply_text("⛔ Эта команда только для администратора")
