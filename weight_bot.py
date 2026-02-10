@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update, InputFile, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
@@ -30,6 +30,7 @@ if ':' not in TELEGRAM_TOKEN:
 # Выводим информацию о токене (первые 10 символов для безопасности)
 logger.info(f"✅ Токен получен: {TELEGRAM_TOKEN[:10]}...")
 logger.info("🤖 Запускаем Telegram Weight Bot...")
+logger.info("🌍 Временная зона: Самара (UTC+4)")
 logger.info("📋 Доступные команды в боте:")
 logger.info("  /start - Начать работу")
 logger.info("  /help - Помощь и инструкции")
@@ -38,8 +39,35 @@ logger.info("  /history - История измерений")
 logger.info("  /delete_last - Удалить последнюю запись о весе")
 logger.info("  Просто отправьте вес числом (например: 75.5)")
 
-
 # ==========================================
+
+# Настройка временной зоны Самары (UTC+4)
+SAMARA_TZ = timezone(timedelta(hours=4))
+
+
+def get_samara_time():
+    """Получить текущее время в Самаре"""
+    return datetime.now(SAMARA_TZ)
+
+
+def format_samara_time(dt=None, date_only=False):
+    """Форматировать время в Самаре"""
+    if dt is None:
+        dt = get_samara_time()
+
+    if isinstance(dt, str):
+        try:
+            # Если dt - строка из базы данных, преобразуем её
+            # Время в базе хранится как строка в формате Самары
+            dt = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+        except:
+            return dt
+
+    if date_only:
+        return dt.strftime('%d.%m.%Y')
+    else:
+        return dt.strftime('%d.%m.%Y %H:%M')
+
 
 # Инициализация базы данных
 def init_db():
@@ -97,16 +125,19 @@ def register_user(user_id, username, first_name, last_name):
     conn.close()
 
 
-# Функция для сохранения веса
+# Функция для сохранения веса с текущим временем Самары
 def save_weight(user_id, weight):
     conn = sqlite3.connect('data/weight_tracker.db')
     cursor = conn.cursor()
 
-    # Сохраняем вес
+    # Получаем текущее время в Самаре и форматируем для SQLite
+    current_time = get_samara_time().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Сохраняем вес с текущим временем Самары
     cursor.execute('''
-        INSERT INTO weight_records (user_id, weight)
-        VALUES (?, ?)
-    ''', (user_id, weight))
+        INSERT INTO weight_records (user_id, weight, date)
+        VALUES (?, ?, ?)
+    ''', (user_id, weight, current_time))
 
     conn.commit()
     conn.close()
@@ -217,10 +248,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     register_user(user.id, user.username, user.first_name, user.last_name)
 
+    # Получаем текущее время в Самаре
+    current_time = format_samara_time()
+
     welcome_text = f"""
 👋 Привет, {user.first_name}!
 
 Я бот для отслеживания веса.
+
+🌍 Временная зона: Самара (UTC+4)
+🕐 Текущее время: {current_time}
 
 📊 Просто отправь мне свой вес в килограммах (например: 75.5 или 80).
 
@@ -234,8 +271,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """
+    current_time = format_samara_time()
+
+    help_text = f"""
 📋 Как пользоваться ботом:
+
+🌍 Временная зона: Самара (UTC+4)
+🕐 Текущее время: {current_time}
 
 Просто отправьте свой вес в килограммах.
 Примеры: 75.5, 80, 68.3
@@ -260,15 +302,13 @@ async def last_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if last_record:
         weight, date, _ = last_record
-        # Преобразуем строку даты в объект datetime
-        try:
-            date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-            formatted_date = date_obj.strftime('%d.%m.%Y %H:%M')
-        except:
-            formatted_date = date
+        # Преобразуем время в Самару
+        formatted_date = format_samara_time(date)
 
         await update.message.reply_text(
-            f"📅 Последнее измерение: {formatted_date}\n⚖️ Вес: {weight} кг",
+            f"🌍 Временная зона: Самара (UTC+4)\n"
+            f"📅 Последнее измерение: {formatted_date}\n"
+            f"⚖️ Вес: {weight} кг",
             reply_markup=get_main_keyboard()
         )
     else:
@@ -284,14 +324,11 @@ async def weight_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = get_weight_history(user_id)
 
     if history:
-        response = "📊 История ваших измерений:\n\n"
+        response = "🌍 Временная зона: Самара (UTC+4)\n"
+        response += "📊 История ваших измерений:\n\n"
         for i, (weight, date) in enumerate(history, 1):
-            try:
-                # Преобразуем строку даты в объект datetime
-                date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-                formatted_date = date_obj.strftime('%d.%m.%Y')
-            except:
-                formatted_date = date
+            # Форматируем дату для Самары
+            formatted_date = format_samara_time(date, date_only=True)
             response += f"{i}. {formatted_date}: {weight} кг\n"
 
         # Добавляем изменение с первого до последнего измерения
@@ -336,15 +373,12 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
 
     weight, date, _ = last_record
 
-    # Форматируем дату
-    try:
-        date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-        formatted_date = date_obj.strftime('%d.%m.%Y %H:%M')
-    except:
-        formatted_date = date
+    # Форматируем дату для Самары
+    formatted_date = format_samara_time(date)
 
     await update.message.reply_text(
         f"❓ Вы уверены, что хотите удалить последнюю запись?\n\n"
+        f"🌍 Временная зона: Самара (UTC+4)\n"
         f"📅 Дата: {formatted_date}\n"
         f"⚖️ Вес: {weight} кг\n\n"
         f"Это действие нельзя отменить!",
@@ -371,14 +405,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if deleted_record:
             weight, date = deleted_record
-            try:
-                date_obj = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-                formatted_date = date_obj.strftime('%d.%m.%Y %H:%M')
-            except:
-                formatted_date = date
+            # Форматируем дату для Самары
+            formatted_date = format_samara_time(date)
 
             await query.edit_message_text(
                 f"🗑️ Запись успешно удалена!\n\n"
+                f"🌍 Временная зона: Самара (UTC+4)\n"
                 f"📅 Дата: {formatted_date}\n"
                 f"⚖️ Вес: {weight} кг\n\n"
                 f"Теперь последней записью является предыдущее измерение."
@@ -396,8 +428,11 @@ async def handle_button_press(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
 
     if text == "📊 Отправить вес":
+        current_time = format_samara_time()
         await update.message.reply_text(
-            "Введите ваш вес в килограммах (например: 75.5 или 80):",
+            f"🌍 Временная зона: Самара (UTC+4)\n"
+            f"🕐 Текущее время: {current_time}\n\n"
+            f"Введите ваш вес в килограммах (например: 75.5 или 80):",
             reply_markup=get_main_keyboard()
         )
 
@@ -438,25 +473,24 @@ async def handle_weight_message(update: Update, context: ContextTypes.DEFAULT_TY
         # Получаем последний вес
         last_record = get_last_weight(user_id)
 
-        # Сохраняем новый вес
+        # Сохраняем новый вес С ТЕКУЩИМ ВРЕМЕНЕМ САМАРЫ
         save_weight(user_id, weight)
 
+        # Получаем текущее время в Самаре
+        current_time = format_samara_time()
+
         # Формируем ответ
-        current_time = datetime.now().strftime('%d.%m.%Y %H:%M')
         response = f"✅ Вес сохранен!\n\n"
-        response += f"📅 Дата: {current_time}\n"
+        response += f"🌍 Временная зона: Самара (UTC+4)\n"
+        response += f"📅 Дата и время: {current_time}\n"
         response += f"⚖️ Вес: {weight} кг\n"
 
         if last_record:
             last_weight_value, last_date, _ = last_record
             difference = weight - last_weight_value
 
-            # Форматируем дату последней записи
-            try:
-                last_date_obj = datetime.strptime(last_date, '%Y-%m-%d %H:%M:%S')
-                formatted_last_date = last_date_obj.strftime('%d.%m.%Y')
-            except:
-                formatted_last_date = last_date
+            # Форматируем дату последней записи для Самары
+            formatted_last_date = format_samara_time(last_date, date_only=True)
 
             response += f"\n📊 Сравнение с последним измерением ({formatted_last_date}):\n"
             response += f"Предыдущий вес: {last_weight_value} кг\n"
@@ -530,6 +564,20 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ошибка при создании резервной копии")
 
 
+# Команда /time - показать текущее время в Самаре
+async def show_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    current_time = format_samara_time()
+
+    time_info = f"""
+🌍 Временная зона: Самара (UTC+4)
+🕐 Текущее время: {current_time}
+
+📅 Все записи о весе сохраняются с местным временем Самары.
+"""
+
+    await update.message.reply_text(time_info, reply_markup=get_main_keyboard())
+
+
 # Главная функция
 def main():
     # Инициализируем базу данных
@@ -546,6 +594,7 @@ def main():
     application.add_handler(CommandHandler("delete_last", delete_last_weight_command))
     application.add_handler(CommandHandler("clear", clear_history))  # Скрытая команда
     application.add_handler(CommandHandler("backup", backup_command))
+    application.add_handler(CommandHandler("time", show_time))  # Новая команда для показа времени
 
     # Регистрируем обработчик нажатий на кнопки клавиатуры
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_button_press))
@@ -563,6 +612,7 @@ def main():
 
     # Запускаем бота
     logger.info("🤖 Бот успешно запущен на Railway!")
+    logger.info("🌍 Временная зона: Самара (UTC+4)")
     logger.info("📱 Откройте Telegram и найдите своего бота")
     logger.info("👉 Отправьте команду /start")
 
