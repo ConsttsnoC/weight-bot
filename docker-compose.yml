@@ -1,0 +1,9 @@
+services:
+  weight-bot:
+    build: .
+    container_name: weight-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
