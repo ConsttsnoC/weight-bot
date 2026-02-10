@@ -2,6 +2,8 @@ import os
 import sqlite3
 import logging
 from datetime import datetime, timezone, timedelta
+import asyncio
+import threading
 from telegram import Update, InputFile, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
@@ -13,6 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+ADMIN_ID = 203790724  # Замените на ваш ID Telegram
 
 # ========== ДОБАВЬТЕ ЭТУ ПРОВЕРКУ ==========
 if not TELEGRAM_TOKEN:
@@ -29,20 +32,30 @@ if ':' not in TELEGRAM_TOKEN:
 
 # Выводим информацию о токене (первые 10 символов для безопасности)
 logger.info(f"✅ Токен получен: {TELEGRAM_TOKEN[:10]}...")
+logger.info(f"👑 Администратор: {ADMIN_ID}")
 logger.info("🤖 Запускаем Telegram Weight Bot...")
 logger.info("🌍 Временная зона: Самара (UTC+4)")
+logger.info("🔄 Автоматический бэкап: каждые 4 часа")
 logger.info("📋 Доступные команды в боте:")
 logger.info("  /start - Начать работу")
 logger.info("  /help - Помощь и инструкции")
 logger.info("  /last - Последний вес")
 logger.info("  /history - История измерений")
 logger.info("  /delete_last - Удалить последнюю запись о весе")
+logger.info("  /backup - Создать резервную копию (админ)")
+logger.info("  /backup_status - Статус автоматического бэкапа")
 logger.info("  Просто отправьте вес числом (например: 75.5)")
 
 # ==========================================
 
 # Настройка временной зоны Самары (UTC+4)
 SAMARA_TZ = timezone(timedelta(hours=4))
+
+# Глобальные переменные для управления бэкапом
+backup_job = None
+backup_enabled = True
+last_backup_time = None
+backup_interval_hours = 4
 
 
 def get_samara_time():
@@ -363,7 +376,7 @@ async def delete_last_weight_command(update: Update, context: ContextTypes.DEFAU
         return
 
     # Создаем inline-кнопки подтверждения
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup  # Добавьте импорт
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     keyboard = [
         [
@@ -536,8 +549,6 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     # Проверка на администратора
-    ADMIN_ID = 203790724  # Замените на ваш ID
-
     if user_id != ADMIN_ID:
         await update.message.reply_text("⛔ Эта команда только для администратора")
         return
@@ -553,16 +564,92 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open(backup_file, 'rb') as file:
                 await update.message.reply_document(
                     document=InputFile(file, filename=os.path.basename(backup_file)),
-                    caption=f"✅ Резервная копия создана: {os.path.basename(backup_file)}"
+                    caption=f"✅ Резервная копия создана вручную: {os.path.basename(backup_file)}"
                 )
-
-            # Удаляем файл после отправки (опционально)
-            # os.remove(backup_file)
 
         except Exception as e:
             await update.message.reply_text(f"❌ Ошибка при отправке файла: {e}")
     else:
         await update.message.reply_text("❌ Ошибка при создании резервной копии")
+
+
+# Команда для управления автоматическим бэкапом
+async def backup_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # Проверка на администратора
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    global backup_enabled, last_backup_time, backup_interval_hours
+
+    status_text = f"""
+🔄 **Статус автоматического бэкапа**
+
+{'✅ **ВКЛЮЧЕН**' if backup_enabled else '❌ **ВЫКЛЮЧЕН**'}
+⏰ **Интервал:** каждые {backup_interval_hours} часа
+📅 **Последний бэкап:** {last_backup_time if last_backup_time else 'Еще не создан'}
+
+**Команды:**
+/backup_enable - Включить автобэкап
+/backup_disable - Выключить автобэкап
+/backup_now - Создать бэкап сейчас
+/backup_set_interval X - Установить интервал (в часах)
+"""
+
+    await update.message.reply_text(status_text)
+
+
+async def backup_enable_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    global backup_enabled
+    backup_enabled = True
+    await update.message.reply_text("✅ Автоматический бэкап включен")
+
+
+async def backup_disable_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    global backup_enabled
+    backup_enabled = False
+    await update.message.reply_text("⛔ Автоматический бэкап выключен")
+
+
+async def backup_set_interval_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    try:
+        interval = int(context.args[0])
+        if interval < 1 or interval > 24:
+            await update.message.reply_text("❌ Интервал должен быть от 1 до 24 часов")
+            return
+
+        global backup_interval_hours
+        backup_interval_hours = interval
+        await update.message.reply_text(f"✅ Интервал бэкапа установлен: каждые {interval} часов")
+
+    except (IndexError, ValueError):
+        await update.message.reply_text("❌ Использование: /backup_set_interval <часы>")
+
+
+async def backup_now_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ Эта команда только для администратора")
+        return
+
+    await create_and_send_backup(context.bot)
 
 
 # Команда /time - показать текущее время в Самаре
@@ -579,8 +666,57 @@ async def show_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(time_info, reply_markup=get_main_keyboard())
 
 
+# Функция для создания и отправки бэкапа
+async def create_and_send_backup(bot):
+    global last_backup_time
+
+    try:
+        logger.info("🔄 Запускаю автоматический бэкап...")
+
+        # Создаем бэкап
+        backup_file = backup_database()
+
+        if backup_file and os.path.exists(backup_file):
+            # Отправляем файл админу
+            with open(backup_file, 'rb') as file:
+                await bot.send_document(
+                    chat_id=ADMIN_ID,
+                    document=InputFile(file, filename=os.path.basename(backup_file)),
+                    caption=f"✅ Автоматический бэкап создан: {os.path.basename(backup_file)}\n"
+                            f"🕐 Время: {format_samara_time()}"
+                )
+
+            last_backup_time = format_samara_time()
+            logger.info(f"✅ Автоматический бэкап отправлен админу: {backup_file}")
+
+            # Удаляем файл после отправки (опционально)
+            # os.remove(backup_file)
+
+        else:
+            logger.error("❌ Не удалось создать файл бэкапа")
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при создании/отправке бэкапа: {e}")
+
+
+# Функция для периодического создания бэкапов
+async def auto_backup_task(bot):
+    global backup_enabled, backup_interval_hours
+
+    while True:
+        try:
+            await asyncio.sleep(backup_interval_hours * 3600)  # Ждем заданное количество часов
+
+            if backup_enabled:
+                await create_and_send_backup(bot)
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка в задаче автобэкапа: {e}")
+            await asyncio.sleep(300)  # Ждем 5 минут при ошибке
+
+
 # Главная функция
-def main():
+async def main():
     # Инициализируем базу данных
     init_db()
 
@@ -593,11 +729,16 @@ def main():
     application.add_handler(CommandHandler("last", last_weight))
     application.add_handler(CommandHandler("history", weight_history))
     application.add_handler(CommandHandler("delete_last", delete_last_weight_command))
-    application.add_handler(CommandHandler("clear", clear_history))  # Скрытая команда
+    application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CommandHandler("backup", backup_command))
-    application.add_handler(CommandHandler("time", show_time))  # Новая команда для показа времени
+    application.add_handler(CommandHandler("time", show_time))
+    application.add_handler(CommandHandler("backup_status", backup_status_command))
+    application.add_handler(CommandHandler("backup_enable", backup_enable_command))
+    application.add_handler(CommandHandler("backup_disable", backup_disable_command))
+    application.add_handler(CommandHandler("backup_set_interval", backup_set_interval_command))
+    application.add_handler(CommandHandler("backup_now", backup_now_command))
 
-    # ⭐⭐ ВАЖНО: Добавляем обработчик callback-запросов ДО обработчиков сообщений ⭐⭐
+    # Добавляем обработчик callback-запросов
     application.add_handler(CallbackQueryHandler(button_callback))
 
     # Регистрируем обработчик нажатий на кнопки клавиатуры
@@ -615,17 +756,29 @@ def main():
     # Запускаем бота
     logger.info("🤖 Бот успешно запущен на Railway!")
     logger.info("🌍 Временная зона: Самара (UTC+4)")
+    logger.info("🔄 Автоматический бэкап: каждые 4 часа")
+    logger.info("👑 Админ ID:", ADMIN_ID)
     logger.info("📱 Откройте Telegram и найдите своего бота")
     logger.info("👉 Отправьте команду /start")
 
+    # Получаем бота для задачи автобэкапа
+    bot = application.bot
+
+    # Запускаем задачу автобэкапа в фоне
+    backup_task = asyncio.create_task(auto_backup_task(bot))
+
     try:
-        application.run_polling()
+        # Запускаем polling
+        await application.run_polling()
     except Exception as e:
         logger.error(f"❌ Ошибка при запуске бота: {e}")
         logger.info("🔄 Попробуйте перезапустить деплоймент на Railway")
     except KeyboardInterrupt:
         logger.info("\n🛑 Бот остановлен")
+    finally:
+        # Отменяем задачу автобэкапа при выходе
+        backup_task.cancel()
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
