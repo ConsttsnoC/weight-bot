@@ -326,9 +326,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     user_id = query.from_user.id
 
-    if callback_data.startswith("admin_"):
-        # Просто выходим, чтобы обработчик admin_callback_handler сделал своё дело
-        return
 
     if not callback_data.endswith(str(user_id)):
         await query.edit_message_text("⛔ Это действие предназначено другому пользователю.")
