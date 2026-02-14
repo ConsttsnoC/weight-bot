@@ -348,107 +348,164 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
+    logger.info(f"🔍 admin_callback_handler ВЫЗВАН с data: {query.data}")
+
     if query.from_user.id != ADMIN_ID:
+        logger.warning(f"⛔ Не админ: {query.from_user.id}")
         await query.edit_message_text("⛔ Это действие только для администратора")
         return
 
-    if query.data == "admin_stats":
-        stats = get_db_stats()
-        message = format_stats_message(stats)
+    try:
+        if query.data == "admin_stats":
+            logger.info("📊 Обработка admin_stats")
+            stats = get_db_stats()
 
-        keyboard = [
-            [
-                InlineKeyboardButton("👥 Список пользователей", callback_data="admin_users"),
-                InlineKeyboardButton("📊 Обновить", callback_data="admin_stats")
+            # Простое форматирование без Markdown
+            message = "📊 ОБЩАЯ СТАТИСТИКА БОТА\n\n"
+            message += f"👥 Всего пользователей: {stats['total_users']}\n"
+            message += f"📝 Всего записей: {stats['total_records']}\n"
+            message += f"📊 Средний вес: {stats['avg_weight']:.1f} кг\n"
+            message += f"⬇️ Мин. вес: {stats['min_weight']:.1f} кг\n"
+            message += f"⬆️ Макс. вес: {stats['max_weight']:.1f} кг\n\n"
+
+            message += "📅 Активность:\n"
+            message += f"🔥 Активных за 7 дней: {stats['active_users_7d']}\n"
+            message += f"📊 Записей за 7 дней: {stats['records_7d']}\n"
+            message += f"📊 Записей за 30 дней: {stats['records_30d']}\n\n"
+
+            if stats['first_record']:
+                first = datetime.strptime(stats['first_record'], '%Y-%m-%d %H:%M:%S')
+                last = datetime.strptime(stats['last_record'], '%Y-%m-%d %H:%M:%S')
+                message += f"🎯 Первая запись: {first.strftime('%d.%m.%Y')}\n"
+                message += f"🎯 Последняя запись: {last.strftime('%d.%m.%Y')}\n"
+                message += f"📆 Всего дней: {(last - first).days + 1}\n\n"
+
+            message += "🏆 Топ-5 пользователей:\n"
+            for i, (uid, count) in enumerate(stats['top_users'], 1):
+                message += f"{i}. ID {uid}: {count} записей\n"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("👥 Список пользователей", callback_data="admin_users"),
+                    InlineKeyboardButton("📊 Обновить", callback_data="admin_stats")
+                ]
             ]
-        ]
 
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+            await query.edit_message_text(
+                text=message,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            logger.info("✅ admin_stats обработано")
 
-    elif query.data == "admin_users":
-        users = get_users_list(10)
+        elif query.data == "admin_users":
+            logger.info("👥 Обработка admin_users")
+            users = get_users_list(10)
 
-        # Форматируем список пользователей
-        message = "👥 **ПОСЛЕДНИЕ 10 ПОЛЬЗОВАТЕЛЕЙ**\n\n"
-        for user in users:
-            user_id, username, first_name, last_name, created_at, records_count, last_record = user
-            name = f"{first_name or ''} {last_name or ''}".strip() or "нет имени"
-            username_display = f"@{username}" if username else "нет username"
-            created = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+            message = "👥 ПОСЛЕДНИЕ 10 ПОЛЬЗОВАТЕЛЕЙ\n\n"
 
-            message += f"🆔 `{user_id}` | {name}\n"
-            message += f"📱 {username_display} | 📅 {created} | 📊 {records_count} зап.\n"
-            if last_record:
-                last = datetime.strptime(last_record, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
-                message += f"🕐 Посл.: {last}\n"
-            message += "─" * 20 + "\n"
+            for user in users:
+                user_id, username, first_name, last_name, created_at, records_count, last_record = user
 
-        keyboard = [
-            [
-                InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats"),
-                InlineKeyboardButton("🔄 Ещё 10", callback_data="admin_users_more")
+                name_parts = []
+                if first_name:
+                    name_parts.append(first_name)
+                if last_name:
+                    name_parts.append(last_name)
+                name = " ".join(name_parts) if name_parts else "нет имени"
+
+                username_str = f"@{username}" if username else "нет username"
+                created = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+
+                message += f"🆔 ID: {user_id}\n"
+                message += f"👤 Имя: {name}\n"
+                message += f"📱 Username: {username_str}\n"
+                message += f"📅 Регистрация: {created}\n"
+                message += f"📊 Записей: {records_count}\n"
+
+                if last_record:
+                    last = datetime.strptime(last_record, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+                    message += f"🕐 Последняя запись: {last}\n"
+
+                message += "─" * 30 + "\n"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats"),
+                    InlineKeyboardButton("🔄 Ещё 10", callback_data="admin_users_more")
+                ]
             ]
-        ]
 
-        # Если сообщение слишком длинное
-        if len(message) > 4000:
-            await query.edit_message_text(
-                "👥 Список пользователей (первые 4000 символов):",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=message[:4000],
-                parse_mode='Markdown'
-            )
-        else:
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-    elif query.data == "admin_users_more":
-        users = get_users_list(20)
-        message = "👥 **ПОЛНЫЙ СПИСОК ПОЛЬЗОВАТЕЛЕЙ (20)**\n\n"
-
-        for user in users:
-            user_id, username, first_name, last_name, created_at, records_count, last_record = user
-            name = f"{first_name or ''} {last_name or ''}".strip() or "нет имени"
-            username_display = f"@{username}" if username else "нет username"
-            created = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
-
-            message += f"🆔 `{user_id}` | {name}\n"
-            message += f"📱 {username_display} | 📅 {created} | 📊 {records_count} зап.\n"
-            if last_record:
-                last = datetime.strptime(last_record, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
-                message += f"🕐 Посл.: {last}\n"
-            message += "─" * 20 + "\n"
-
-        keyboard = [
-            [InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats")]
-        ]
-
-        if len(message) > 4000:
-            await query.edit_message_text(
-                "👥 Полный список пользователей (первые 4000 символов):",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            # Отправляем остаток отдельным сообщением
-            remaining_text = message[4000:8000] if len(message) > 4000 else ""
-            if remaining_text:
+            # Если сообщение слишком длинное
+            if len(message) > 4000:
+                await query.edit_message_text(
+                    text="👥 Список пользователей (первые 4000 символов):",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
                 await context.bot.send_message(
                     chat_id=ADMIN_ID,
-                    text=remaining_text,
-                    parse_mode='Markdown'
+                    text=message[:4000]
                 )
-        else:
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            else:
+                await query.edit_message_text(
+                    text=message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            logger.info("✅ admin_users обработано")
+
+        elif query.data == "admin_users_more":
+            logger.info("👥 Обработка admin_users_more")
+            users = get_users_list(20)
+
+            message = "👥 ПОЛНЫЙ СПИСОК ПОЛЬЗОВАТЕЛЕЙ (20)\n\n"
+
+            for user in users:
+                user_id, username, first_name, last_name, created_at, records_count, last_record = user
+
+                name_parts = []
+                if first_name:
+                    name_parts.append(first_name)
+                if last_name:
+                    name_parts.append(last_name)
+                name = " ".join(name_parts) if name_parts else "нет имени"
+
+                username_str = f"@{username}" if username else "нет username"
+                created = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+
+                message += f"🆔 ID: {user_id}\n"
+                message += f"👤 Имя: {name}\n"
+                message += f"📱 Username: {username_str}\n"
+                message += f"📅 Регистрация: {created}\n"
+                message += f"📊 Записей: {records_count}\n"
+
+                if last_record:
+                    last = datetime.strptime(last_record, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+                    message += f"🕐 Последняя запись: {last}\n"
+
+                message += "─" * 30 + "\n"
+
+            keyboard = [
+                [InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats")]
+            ]
+
+            if len(message) > 4000:
+                await query.edit_message_text(
+                    text="👥 Полный список пользователей (первые 4000 символов):",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                # Отправляем остаток
+                remaining = message[4000:8000]
+                if remaining:
+                    await context.bot.send_message(
+                        chat_id=ADMIN_ID,
+                        text=remaining
+                    )
+            else:
+                await query.edit_message_text(
+                    text=message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            logger.info("✅ admin_users_more обработано")
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
+        await query.edit_message_text(f"❌ Произошла ошибка: {str(e)}")
