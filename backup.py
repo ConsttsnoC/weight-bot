@@ -70,7 +70,7 @@ async def main():
     logger.info("🚀 Запуск бэкапов каждую минуту")
     while True:
         await send_backup()
-        await asyncio.sleep(60)  # 1 минута
+        await asyncio.sleep(21600)  # 1 минута
 
 
 def start_backup_scheduler():
