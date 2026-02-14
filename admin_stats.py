@@ -384,11 +384,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             for i, (uid, count) in enumerate(stats['top_users'], 1):
                 message += f"{i}. ID {uid}: {count} записей\n"
 
+            # Только одна кнопка - список пользователей
             keyboard = [
-                [
-                    InlineKeyboardButton("👥 Список пользователей", callback_data="admin_users"),
-                    InlineKeyboardButton("📊 Обновить", callback_data="admin_stats")
-                ]
+                [InlineKeyboardButton("👥 Список пользователей", callback_data="admin_users")]
             ]
 
             await query.edit_message_text(
@@ -428,6 +426,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
                 message += "─" * 30 + "\n"
 
+            # Кнопки: назад к статистике и ещё 10
             keyboard = [
                 [
                     InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats"),
@@ -483,6 +482,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
                 message += "─" * 30 + "\n"
 
+            # Только кнопка назад к статистике
             keyboard = [
                 [InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats")]
             ]
