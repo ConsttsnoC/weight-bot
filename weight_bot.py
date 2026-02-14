@@ -194,22 +194,8 @@ def get_main_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 
-# ✅ ИМПОРТ БЭКАПОВ ПОСЛЕ ВСЕХ ФУНКЦИЙ БД
-try:
-    from backup import backup_database, start_backup_scheduler
-
-    logger.info("✅ ✅ БЭКАПЫ ИМПОРТИРОВАНЫ!")
-except ImportError as e:
-    logger.warning(f"⚠️ Бэкапы недоступны: {e}")
-
-
-    # Создаем заглушки
-    def backup_database():
-        return None
-
-
-    def start_backup_scheduler():
-        logger.info("⚠️ Заглушка бэкапов")
+from backup import backup_database, start_backup_scheduler
+logger.info("🔥 БЭКАПЫ ЗАГРУЖЕНЫ! АДМИНУ БУДЕТ ПРИХОДИТЬ КАЖДУЮ МИНУТУ!")
 
 
 # Команды бота
