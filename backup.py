@@ -57,12 +57,20 @@ def backup_database():
 
 
 def send_backup_to_admin_sync(backup_file):
-    """Синхронная отправка бэкапа"""
     try:
         bot = Bot(token=TELEGRAM_TOKEN)
         backup_size = os.path.getsize(backup_file) / 1024 / 1024
-        timestamp = os.path.basename(backup_file).split('_')[2].replace('.db', '')
-        backup_time = datetime.strptime(timestamp, '%Y%m%d_%H%M%S').strftime('%d.%m.%Y %H:%M')
+
+        # ✅ ИСПРАВЛЕНО: правильный парсинг даты
+        filename = os.path.basename(backup_file)
+        if 'weight_backup_' in filename:
+            timestamp_part = filename.replace('weight_backup_', '').replace('.db', '')
+            if len(timestamp_part) == 15:  # 20260214_142344
+                backup_time = datetime.strptime(timestamp_part, '%Y%m%d_%H%M%S').strftime('%d.%m.%Y %H:%M')
+            else:
+                backup_time = timestamp_part  # fallback
+        else:
+            backup_time = "неизвестно"
 
         caption = (
             f"🤖 **АВТОБЭКАП #{backup_time}**\n\n"
