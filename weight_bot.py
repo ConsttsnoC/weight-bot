@@ -4,6 +4,12 @@ import logging
 from datetime import datetime, timezone, timedelta
 from telegram import Update, InputFile, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from admin_stats import (
+    stats_command,
+    users_command,
+    user_details_command,
+    admin_callback_handler
+)
 
 # Настройка логирования
 logging.basicConfig(
@@ -532,6 +538,12 @@ def main():
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("time", show_time))
     application.add_handler(CommandHandler("backup_status", backup_status))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("users", users_command))
+    application.add_handler(CommandHandler("user", user_details_command))
+
+    # Callback для админ-панели
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
 
     # ⭐ ВАЖНО: CallbackQueryHandler ДО MessageHandler ⭐
     application.add_handler(CallbackQueryHandler(button_callback))
