@@ -546,11 +546,11 @@ def main():
     application.add_handler(CommandHandler("users", users_command))
     application.add_handler(CommandHandler("user", user_details_command))
 
-    # ⭐ СНАЧАЛА общий обработчик для всех кнопок
-    application.add_handler(CallbackQueryHandler(button_callback))
-
-    # ПОТОМ специфичный для админ-кнопок
+    # ⭐ СНАЧАЛА специфичный для админ-кнопок (pattern)
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
+
+    # ПОТОМ общий обработчик для всех остальных кнопок
+    application.add_handler(CallbackQueryHandler(button_callback))
 
     application.add_handler(MessageHandler(
         filters.Regex(r'^(📊 Отправить вес|📅 Последний вес|📈 История|🗑️ Удалить последнее|ℹ️ Помощь)$'),
