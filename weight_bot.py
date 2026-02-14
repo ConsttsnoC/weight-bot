@@ -326,10 +326,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     user_id = query.from_user.id
 
-
-    if not callback_data.endswith(str(user_id)):
-        await query.edit_message_text("⛔ Это действие предназначено другому пользователю.")
-        return
+    # УБРАЛ ВСЯ ХУЙНЮ С ПРОВЕРКАМИ
 
     if callback_data.startswith("delete_confirm"):
         deleted_record = delete_last_weight(user_id)
