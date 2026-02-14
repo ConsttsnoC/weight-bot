@@ -17,10 +17,10 @@ from telegram.error import TelegramError
 
 # ==================== КОНФИГУРАЦИЯ ====================
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')  # Railway переменная
-ADMIN_ID = 203790724  # ← ВАШ TELEGRAM ID!
+ADMIN_ID = 203790724
 DB_PATH = "data/weight_tracker.db"
 BACKUP_DIR = "backups"
-BACKUP_INTERVAL = 1 * 60  # 30 минут
+BACKUP_INTERVAL = 1
 
 # Логирование
 logging.basicConfig(
