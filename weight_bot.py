@@ -542,11 +542,11 @@ def main():
     application.add_handler(CommandHandler("users", users_command))
     application.add_handler(CommandHandler("user", user_details_command))
 
-    # Callback для админ-панели
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
-
-    # ⭐ ВАЖНО: CallbackQueryHandler ДО MessageHandler ⭐
+    # ⭐ СНАЧАЛА общий обработчик для всех кнопок
     application.add_handler(CallbackQueryHandler(button_callback))
+
+    # ПОТОМ специфичный для админ-кнопок
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
 
     application.add_handler(MessageHandler(
         filters.Regex(r'^(📊 Отправить вес|📅 Последний вес|📈 История|🗑️ Удалить последнее|ℹ️ Помощь)$'),
