@@ -371,8 +371,21 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     elif query.data == "admin_users":
         users = get_users_list(10)
+
+        # Форматируем список пользователей
         message = "👥 **ПОСЛЕДНИЕ 10 ПОЛЬЗОВАТЕЛЕЙ**\n\n"
-        message += format_users_list(users)
+        for user in users:
+            user_id, username, first_name, last_name, created_at, records_count, last_record = user
+            name = f"{first_name or ''} {last_name or ''}".strip() or "нет имени"
+            username_display = f"@{username}" if username else "нет username"
+            created = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+
+            message += f"🆔 `{user_id}` | {name}\n"
+            message += f"📱 {username_display} | 📅 {created} | 📊 {records_count} зап.\n"
+            if last_record:
+                last = datetime.strptime(last_record, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+                message += f"🕐 Посл.: {last}\n"
+            message += "─" * 20 + "\n"
 
         keyboard = [
             [
@@ -389,7 +402,8 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=message[:4000]
+                text=message[:4000],
+                parse_mode='Markdown'
             )
         else:
             await query.edit_message_text(
@@ -400,7 +414,20 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     elif query.data == "admin_users_more":
         users = get_users_list(20)
-        message = format_users_list(users)
+        message = "👥 **ПОЛНЫЙ СПИСОК ПОЛЬЗОВАТЕЛЕЙ (20)**\n\n"
+
+        for user in users:
+            user_id, username, first_name, last_name, created_at, records_count, last_record = user
+            name = f"{first_name or ''} {last_name or ''}".strip() or "нет имени"
+            username_display = f"@{username}" if username else "нет username"
+            created = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+
+            message += f"🆔 `{user_id}` | {name}\n"
+            message += f"📱 {username_display} | 📅 {created} | 📊 {records_count} зап.\n"
+            if last_record:
+                last = datetime.strptime(last_record, '%Y-%m-%d %H:%M:%S').strftime('%d.%m.%Y')
+                message += f"🕐 Посл.: {last}\n"
+            message += "─" * 20 + "\n"
 
         keyboard = [
             [InlineKeyboardButton("📊 Назад к статистике", callback_data="admin_stats")]
@@ -408,13 +435,17 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
         if len(message) > 4000:
             await query.edit_message_text(
-                "👥 Полный список пользователей:",
+                "👥 Полный список пользователей (первые 4000 символов):",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=message[:4000]
-            )
+            # Отправляем остаток отдельным сообщением
+            remaining_text = message[4000:8000] if len(message) > 4000 else ""
+            if remaining_text:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=remaining_text,
+                    parse_mode='Markdown'
+                )
         else:
             await query.edit_message_text(
                 message,
