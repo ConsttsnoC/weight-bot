@@ -1,4 +1,4 @@
-# backup.py
+# backup.py - ПОЛНАЯ ВЕРСИЯ С ПРОВЕРКАМИ
 import os
 import sqlite3
 import shutil
@@ -13,7 +13,6 @@ from telegram.error import TelegramError
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ID администратора
 ADMIN_ID = 203790724
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 
@@ -23,8 +22,18 @@ def backup_database():
     source_db = 'data/weight_tracker.db'
     backup_dir = 'backups'
 
+    # ✅ КРИТИЧЕСКАЯ ПРОВЕРКА БАЗЫ
     if not os.path.exists(source_db):
-        logger.warning(f"⚠️ Файл базы данных не найден: {source_db}")
+        logger.error(f"❌ БАЗА НЕ НАЙДЕНА: {source_db}")
+        logger.error(f"📂 Содержимое папки data: {os.listdir('data') if os.path.exists('data') else 'ПАПКИ data НЕТ!'}")
+        return None
+
+    # ✅ Проверяем размер БД
+    try:
+        db_size = os.path.getsize(source_db)
+        logger.info(f"✅ БД найдена: {source_db} ({db_size / 1024 / 1024:.2f} MB)")
+    except:
+        logger.error("❌ Не удалось прочитать размер БД")
         return None
 
     os.makedirs(backup_dir, exist_ok=True)
@@ -33,31 +42,22 @@ def backup_database():
 
     try:
         shutil.copy2(source_db, backup_file)
+        logger.info(f"✅ КОПИРОВАНИЕ УСПЕШНО: {backup_file}")
 
-        # Удаляем старые бэкапы (оставляем последние 7)
+        # Удаляем старые (оставляем 7)
         backups = sorted([f for f in os.listdir(backup_dir) if f.endswith('.db')])
         if len(backups) > 7:
             for old_backup in backups[:-7]:
-                try:
-                    os.remove(os.path.join(backup_dir, old_backup))
-                except:
-                    pass
+                os.remove(os.path.join(backup_dir, old_backup))
 
-        backup_size = os.path.getsize(backup_file) / 1024 / 1024
-        logger.info(f"✅ Бэкап создан: {backup_file} ({backup_size:.2f} MB)")
         return backup_file
-
     except Exception as e:
-        logger.error(f"❌ Ошибка при создании бэкапа: {e}")
+        logger.error(f"❌ ОШИБКА КОПИРОВАНИЯ: {e}")
         return None
 
 
 def send_backup_to_admin_sync(backup_file):
-    """СИНХРОННАЯ отправка бэкапа администратору"""
-    if not backup_file or not os.path.exists(backup_file):
-        logger.error("❌ Файл бэкапа не найден")
-        return False
-
+    """Синхронная отправка бэкапа"""
     try:
         bot = Bot(token=TELEGRAM_TOKEN)
         backup_size = os.path.getsize(backup_file) / 1024 / 1024
@@ -65,112 +65,66 @@ def send_backup_to_admin_sync(backup_file):
         backup_time = datetime.strptime(timestamp, '%Y%m%d_%H%M%S').strftime('%d.%m.%Y %H:%M')
 
         caption = (
-            f"🤖 **АВТОМАТИЧЕСКИЙ БЭКАП БАЗЫ ДАННЫХ**\n\n"
-            f"📅 Время создания: {backup_time}\n"
+            f"🤖 **АВТОБЭКАП #{backup_time}**\n\n"
             f"📦 Размер: {backup_size:.2f} MB\n"
-            f"💾 Всего записей: {get_total_records()}\n"
-            f"👥 Всего пользователей: {get_total_users()}\n\n"
-            f"✅ Бэкап успешно отправлен!"
+            f"💾 Записей: {get_total_records()}\n"
+            f"👥 Пользователей: {get_total_users()}"
         )
 
         with open(backup_file, 'rb') as file:
-            bot.send_document(
-                chat_id=ADMIN_ID,
-                document=file,
-                caption=caption,
-                parse_mode='Markdown'
-            )
+            bot.send_document(chat_id=ADMIN_ID, document=file, caption=caption)
 
-        logger.info(f"✅ Бэкап отправлен администратору {ADMIN_ID}")
+        logger.info(f"✅ ✅ ОТПРАВЛЕНО АДМИНУ: {backup_file}")
         return True
-
-    except TelegramError as e:
-        logger.error(f"❌ Telegram ошибка: {e}")
-        return False
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки бэкапа: {e}")
+        logger.error(f"❌ ОШИБКА ОТПРАВКИ: {e}")
         return False
 
 
 def get_total_records():
-    """Получить общее количество записей"""
     try:
         conn = sqlite3.connect('data/weight_tracker.db')
         cursor = conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM weight_records')
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count
+        return cursor.fetchone()[0]
     except:
         return 0
 
 
 def get_total_users():
-    """Получить общее количество пользователей"""
     try:
         conn = sqlite3.connect('data/weight_tracker.db')
         cursor = conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM users')
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count
+        return cursor.fetchone()[0]
     except:
         return 0
 
 
 def perform_auto_backup():
-    """Выполнить автоматический бэкап (СИНХРОННО)"""
-    logger.info("🚀 Выполняю автоматический бэкап...")
+    logger.info("🚀 === АВТОБЭКАП СТАРТ ===")
     backup_file = backup_database()
-
     if backup_file:
-        success = send_backup_to_admin_sync(backup_file)
-        if success:
-            logger.info("✅ Автоматический бэкап успешно отправлен!")
-        else:
-            logger.error("❌ Не удалось отправить автоматический бэкап")
-    else:
-        logger.error("❌ Не удалось создать автоматический бэкап")
+        send_backup_to_admin_sync(backup_file)
+    logger.info("🚀 === АВТОБЭКАП КОНЕЦ ===")
 
 
 def run_backup_schedule():
-    """Запуск расписания для автоматических бэкапов"""
-    # Каждые 30 МИНУТ для теста (потом измените на 1 час)
     schedule.every(1).minutes.do(perform_auto_backup)
 
-    # Первый бэкап сразу
-    logger.info("🔄 Первый автоматический бэкап при старте...")
-    perform_auto_backup()
-
-    logger.info("⏰ Планировщик запущен (каждые 30 минут для теста)")
+    logger.info("⏰ Планировщик: Ждем 30 минут до следующего бэкапа...")
 
     while True:
-        try:
-            schedule.run_pending()
-            time.sleep(1)
-        except Exception as e:
-            logger.error(f"❌ Ошибка планировщика: {e}")
-            time.sleep(1)
+        schedule.run_pending()
+        time.sleep(60)
 
 
 def start_backup_scheduler():
-    """Запуск планировщика в отдельном потоке"""
-    try:
-        scheduler_thread = threading.Thread(
-            target=run_backup_schedule,
-            daemon=True,
-            name="AutoBackupScheduler"
-        )
-        scheduler_thread.start()
-        logger.info("🚀 ✅ Планировщик бэкапов ЗАПУЩЕН (каждые 30 мин для теста)")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Ошибка запуска планировщика: {e}")
-        return False
-
-
-# Для ручного бэкапа (остается как было)
-def backup_database():
-    """Создание резервной копии для команды /backup"""
-    # ... (тот же код что выше)
-    pass  # Уже определена выше
+    scheduler_thread = threading.Thread(
+        target=run_backup_schedule,
+        daemon=True,
+        name="AutoBackup"
+    )
+    scheduler_thread.start()
+    logger.info("✅ ✅ ПЛАНИРОВЩИК ЗАПУЩЕН!")
+    return True

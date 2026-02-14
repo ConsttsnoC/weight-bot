@@ -639,23 +639,26 @@ async def backup_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Главная функция
 def main():
+    # ✅ 1. ПРЯМО СРАЗУ ИНИЦИАЛИЗИРУЕМ БД
+    logger.info("🗄️ Инициализация БАЗЫ ДАННЫХ...")
     init_db()
 
-    # ✅ ЛОГИ для отладки
-    logger.info("=" * 50)
-    logger.info("🔄 ЗАПУСК АВТОМАТИЧЕСКИХ БЭКАПОВ")
-    logger.info("=" * 50)
-
-    backup_started = start_backup_scheduler()
-
-    if backup_started:
-        logger.info("✅ ✅ ✅ ПЛАНИРОВЩИК БЭКАПОВ РАБОТАЕТ!")
-        logger.info("⏰ ПЕРВЫЙ БЭКАП: через 30 минут")
-        logger.info("⏰ СЛЕДУЮЩИЕ: каждые 30 минут")
+    # ✅ 2. ПРОВЕРЯЕМ БД
+    if os.path.exists('data/weight_tracker.db'):
+        size = os.path.getsize('data/weight_tracker.db') / 1024 / 1024
+        logger.info(f"✅ БД готова: {size:.2f} MB")
     else:
-        logger.warning("⚠️ ПЛАНИРОВЩИК НЕ ЗАПУЩЕН!")
+        logger.error("❌ БД НЕ СОЗДАНА!!!")
+        return
 
-    logger.info("=" * 50)
+    # ✅ 3. ЗАПУСКАЕМ БЭКАПЫ ПОСЛЕ БД
+    logger.info("=" * 60)
+    logger.info("🔄 ЗАПУСК БЭКАПОВ")
+    logger.info("=" * 60)
+
+    start_backup_scheduler()
+
+    logger.info("=" * 60)
 
     # Создаем приложение
     application = Application.builder().token(TELEGRAM_TOKEN).build()
