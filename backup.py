@@ -20,7 +20,7 @@ TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')  # Railway переменная
 ADMIN_ID = 203790724  # ← ВАШ TELEGRAM ID!
 DB_PATH = "data/weight_tracker.db"
 BACKUP_DIR = "backups"
-BACKUP_INTERVAL = 30 * 60  # 30 минут
+BACKUP_INTERVAL = 1 * 60  # 30 минут
 
 # Логирование
 logging.basicConfig(
