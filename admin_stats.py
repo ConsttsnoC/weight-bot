@@ -266,7 +266,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [
                 InlineKeyboardButton("👥 Список пользователей", callback_data="admin_users"),
-                InlineKeyboardButton("📊 Обновить", callback_data="admin_stats")
             ]
         ]
 
